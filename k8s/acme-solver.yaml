@@ -1,0 +1,36 @@
+# Serves Certbot HTTP-01 challenges (certbot --webroot -w /var/www/certbot on the node).
+# Lets certificates be issued/renewed with zero downtime. See docs/TLS.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acme-solver
+  labels: { app: acme-solver }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: acme-solver }
+  template:
+    metadata:
+      labels: { app: acme-solver }
+    spec:
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.29-alpine
+          ports: [{ containerPort: 8080, name: http }]
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+          volumeMounts:
+            - { name: webroot, mountPath: /usr/share/nginx/html, readOnly: true }
+      volumes:
+        - name: webroot
+          hostPath: { path: /var/www/certbot, type: DirectoryOrCreate }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acme-solver
+spec:
+  type: ClusterIP
+  selector: { app: acme-solver }
+  ports: [{ port: 8080, targetPort: http }]

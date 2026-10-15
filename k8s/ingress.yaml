@@ -1,0 +1,23 @@
+# Routed by the F5 NGINX Ingress Controller (see infra/terraform/user_data.sh.tftpl).
+# `biblioteca.example.com` is replaced with DOMAIN by `make deploy`.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: biblioteca
+  annotations:
+    nginx.org/client-max-body-size: "1m"
+    nginx.org/hsts: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [biblioteca.example.com]
+      secretName: biblioteca-tls   # created in docs/TLS.md
+  rules:
+    - host: biblioteca.example.com
+      http:
+        paths:
+          - { path: /.well-known/acme-challenge, pathType: Prefix, backend: { service: { name: acme-solver, port: { number: 8080 } } } }
+          - { path: /api/auth, pathType: Prefix, backend: { service: { name: auth-service, port: { number: 3000 } } } }
+          - { path: /api/books, pathType: Prefix, backend: { service: { name: catalog-service, port: { number: 8000 } } } }
+          - { path: /api/reservations, pathType: Prefix, backend: { service: { name: reservation-service, port: { number: 8000 } } } }
+          - { path: /, pathType: Prefix, backend: { service: { name: frontend, port: { number: 8080 } } } }

@@ -1,0 +1,45 @@
+#!/bin/bash
+# Bootstraps a single-node K3s cluster with the NGINX Ingress Controller.
+set -euxo pipefail
+
+# 2 GiB swap: cheap insurance against OOM during image pulls on a 4 GiB node.
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+# Traefik (K3s default) is disabled: NGINX is the ingress/reverse proxy.
+# ServiceLB (klipper) stays enabled and binds the controller's LoadBalancer Service to host ports 80/443,
+# so no AWS load balancer is needed.
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${k3s_version}" sh -s - server \
+  --disable traefik \
+  --tls-san "${public_ip}" \
+  --write-kubeconfig-mode 0644
+
+# K3s auto-applies anything in this folder; the Helm controller installs the chart.
+# F5 NGINX Ingress Controller (the community kubernetes/ingress-nginx project was retired in 2026).
+cat > /var/lib/rancher/k3s/server/manifests/nginx-ingress.yaml <<'EOF'
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nginx-ingress
+  namespace: kube-system
+spec:
+  repo: https://helm.nginx.com/stable
+  chart: nginx-ingress
+  targetNamespace: nginx-ingress
+  createNamespace: true
+  valuesContent: |-
+    controller:
+      ingressClass:
+        name: nginx
+        setAsDefaultIngress: true
+      service:
+        type: LoadBalancer
+      resources:
+        requests: { cpu: 50m, memory: 96Mi }
+EOF
+
+# Convenience for the ubuntu user (and for CI over SSH).
+echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /home/ubuntu/.bashrc
+snap install certbot --classic || true

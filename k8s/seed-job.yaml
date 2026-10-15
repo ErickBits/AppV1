@@ -1,0 +1,18 @@
+# One-off: `make seed` (deletes and recreates this Job). Idempotent.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-books
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: ghcr.io/OWNER/biblioteca-catalog:latest
+          command: ["python", "-m", "app.seed"]
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }

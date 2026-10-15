@@ -1,0 +1,12 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+.env
+*.tfstate*
+.terraform/
+*.tfvars
+!*.tfvars.example
+kubeconfig*
+certs/

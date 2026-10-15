@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: biblioteca
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - redis.yaml
+  - auth-service.yaml
+  - catalog-service.yaml
+  - reservation-service.yaml
+  - frontend.yaml
+  - acme-solver.yaml
+  - ingress.yaml
+# Images are written as ghcr.io/OWNER/<name>:latest; `make deploy` (and CI) render the
+# manifests and substitute REGISTRY, IMAGE_TAG and DOMAIN with sed before applying.

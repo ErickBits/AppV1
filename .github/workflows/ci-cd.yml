@@ -1,0 +1,116 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------- CI
+  test:
+    name: Test (docker compose + e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Lint Python
+        run: pipx run ruff check services/catalog-service services/reservation-service --select E,F --ignore E501
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Start stack
+        run: docker compose up -d --build --wait --wait-timeout 180 || (docker compose logs; exit 1)
+
+      - name: Seed + end-to-end tests
+        run: |
+          docker compose exec -T catalog-service python -m app.seed
+          python3 tests/e2e.py http://localhost:8080
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check
+      - run: terraform init -backend=false && terraform validate
+
+  # ------------------------------------------------------------ Build
+  images:
+    name: Build & push ${{ matrix.service }}
+    needs: [test, terraform]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - { service: auth, context: services/auth-service }
+          - { service: catalog, context: services/catalog-service }
+          - { service: reservation, context: services/reservation-service }
+          - { service: frontend, context: frontend }
+    steps:
+      - uses: actions/checkout@v5
+      - name: Registry name (GHCR requires lowercase)
+        run: echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/biblioteca-${{ matrix.service }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/biblioteca-${{ matrix.service }}:latest
+          # GitHub Actions cache: faster rebuilds, no registry storage cost.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ------------------------------------------------------------ Deploy
+  deploy:
+    name: Deploy to K3s
+    needs: images
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      # Same render as `make deploy`: kustomize → sed (registry, SHA tag, domain) → kubectl apply over SSH.
+      # The K3s API (6443) is never exposed to the internet.
+      - name: Apply manifests
+        run: |
+          make deploy \
+            EC2_IP=${{ secrets.EC2_HOST }} \
+            DOMAIN=${{ secrets.DOMAIN }} \
+            GH_OWNER=${GITHUB_REPOSITORY_OWNER,,} \
+            TAG=${{ github.sha }}
