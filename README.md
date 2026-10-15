@@ -89,3 +89,4 @@ Secrets del repositorio: `EC2_HOST` (la EIP), `EC2_SSH_KEY` (llave privada), `DO
 - Un solo nodo, sin alta disponibilidad (decisión de costo, ver ARCHITECTURE.md).
 - Si el admin **sube** `total_copies` de un libro que tiene cola, las copias nuevas quedan disponibles para quien reserve primero en lugar de asignarse a la cola.
 - No hay notificaciones por correo cuando una reserva pasa de `waiting` a `active`; el usuario lo ve en su perfil.
+# AppV1
