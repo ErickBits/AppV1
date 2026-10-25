@@ -1,11 +1,11 @@
 # ---- deps: install production dependencies only ----
-FROM node:22-alpine AS deps
+FROM node:22.23.4-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
 # ---- runtime: minimal image, non-root ----
-FROM node:22-alpine AS runtime
+FROM node:22.23.4-alpine AS runtime
 ENV NODE_ENV=production PORT=3000
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

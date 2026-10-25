@@ -9,45 +9,7 @@ export const pool = new pg.Pool({
 
 export async function migrate() {
   await pool.query(`
-    CREATE TA
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    BLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS users (
       id            SERIAL PRIMARY KEY,
       email         TEXT UNIQUE NOT NULL,
       name          TEXT NOT NULL,
