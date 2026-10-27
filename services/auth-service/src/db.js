@@ -1,6 +1,9 @@
 import pg from "pg";
 import bcrypt from "bcryptjs";
 
+/**
+ * Database connection pool
+ */
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: 5,
